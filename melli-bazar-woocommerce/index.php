@@ -39,7 +39,7 @@ function init_melli_bazar_woocommerce() {
 		 * Constructor for the gateway.
 		 */
 		public function __construct() {
-			$this->id = 'melli_pay';
+			$this->id = 'melli_bazar_pay';
 			$this->icon = WP_PLUGIN_URL . "/" . plugin_basename(dirname(__FILE__)) . '/images/logo.png';
 			$this->has_fields = false;
 			$this->order_button_text = __('پرداخت', 'woocommerce');
