@@ -3,7 +3,7 @@
 Plugin Name: درگاه ملی بازار ووکامرس (بانک ملی)
 Plugin URI: https://sadadpsp.ir
 Description: درگاه ملی بازار ووکامرس (بانک ملی)
-Version: 1.0
+Version: 1.0.1
 Author: http://almaatech.ir
 Author URI: http://almaatech.ir
  */
@@ -169,65 +169,64 @@ function init_melli_bazar_woocommerce() {
 			$order = new WC_Order($order_id);
 			$currency = $order->get_order_currency();
 
-			$form = '<form action="" method="POST" id="mw-checkout-form">
-						<input type="submit" name="mw_submit" class="button alt" value="' . __('پرداخت', 'woocommerce') . '"/>
-						<a class="button cancel" href="' . $woocommerce->cart->get_checkout_url() . '">' . __('بازگشت', 'woocommerce') . '</a>
-					 </form><br/>';
-			echo $form;
+			$Amount = $this->get_price(intval($order->order_total), $currency);
 
-			if (isset($_POST["mw_submit"])) {
-				$Amount = $this->get_price(intval($order->order_total), $currency);
+			$terminal_id = $this->terminal_id;
+			$merchant_id = $this->merchant_id;
+			$terminal_key = $this->terminal_key;
 
-				$terminal_id = $this->terminal_id;
-				$merchant_id = $this->merchant_id;
-				$terminal_key = $this->terminal_key;
+			$orderId = date('ymdHis');
+			$callBackUrl = add_query_arg('wc_order', $order_id, WC()->api_request_url('WC_Gateway_Melli_Bazar'));
 
-				$orderId = date('ymdHis');
-				$callBackUrl = add_query_arg('wc_order', $order_id, WC()->api_request_url('WC_Gateway_Melli_Bazar'));
+			$sign_data = $this->sadad_encrypt($terminal_id . ';' . $orderId . ';' . $Amount, $terminal_key);
 
-				$sign_data = $this->sadad_encrypt($terminal_id . ';' . $orderId . ';' . $Amount, $terminal_key);
+			$items = $woocommerce->cart->get_cart();
+			$product_list = [];
+			foreach($items as $item => $values) {
+				$_product =  wc_get_product( $values['data']->get_id());
+				$prd = new stdClass();
+				$prd->GoodsCode = $values['product_id'];
+				$prd->GoodsName = $_product->get_title();
+				$prd->Price = $this->get_price(intval(get_post_meta($values['product_id'] , '_price', true)), $currency);
+				$prd->QTY = $values['quantity'];
+				$prd->Discount = 0;
+				$product_list[] = $prd;
+			}
 
-				$items = $woocommerce->cart->get_cart();
-				$product_list = [];
-				foreach($items as $item => $values) {
-					$_product =  wc_get_product( $values['data']->get_id());
-					$prd = new stdClass();
-					$prd->GoodsCode = $values['product_id'];
-					$prd->GoodsName = $_product->get_title();
-					$prd->Price = get_post_meta($values['product_id'] , '_price', true);
-					$prd->QTY = $values['quantity'];
-					$prd->Discount = 0;
-					$product_list[] = $prd;
-				}
-				if ($shipping_total = $order->get_shipping_total()){
-					$prd = new stdClass();
-					$prd->GoodsCode = 'Shipment';
-					$prd->GoodsName = 'هزینه ارسال';
-					$prd->Price = $shipping_total;
-					$prd->QTY = 1;
-					$prd->Discount = 0;
-					$product_list[] = $prd;
-				}
-				$parameters = array(
-					'MerchantID' => $merchant_id,
-					'TerminalId' => $terminal_id,
-					'Amount' => $Amount,
-					'OrderId' => $orderId,
-					'LocalDateTime' => date('Ymdhis'),
-					'ReturnUrl' => $callBackUrl,
-					'SignData' => $sign_data,
-					'AdditionalData' => '',
-					'ListQTY' => count($items),
-					'GoodsList' => $product_list,
-				);
+			if ($shipping_total = $order->get_shipping_total()){
+				$prd = new stdClass();
+				$prd->GoodsCode = 'Shipment';
+				$prd->GoodsName = 'هزینه ارسال';
+				$prd->Price = $this->get_price(intval($shipping_total), $currency);
+				$prd->QTY = 1;
+				$prd->Discount = 0;
+				$product_list[] = $prd;
+			}
 
-				$error_flag = false;
-				$error_msg = '';
-				$result = $this->sadad_call_api('https://mellibazar.sadadpsp.ir/api/v0/MelliBazarPaymentRequest', $parameters);
-				if ($result != false) {
-					if ($result->ResCode == 0) {
-						//header('Location: https://mellibazar.sadadpsp.ir/Purchase?Token=' . $res->Token);
-						echo '<form id="redirect_to_melli" method="get" action="https://mellibazar.sadadpsp.ir/Purchase" style="display:none !important;"  >
+			$parameters = array(
+				'MerchantID' => $merchant_id,
+				'TerminalId' => $terminal_id,
+				'Amount' => $Amount,
+				'OrderId' => $orderId,
+				'LocalDateTime' => date('Ymdhis'),
+				'ReturnUrl' => $callBackUrl,
+				'SignData' => $sign_data,
+				'AdditionalData' => '',
+				'ListQTY' => count($items) + ($shipping_total ? 1 : 0),
+				'GoodsList' => $product_list,
+			);
+			file_put_contents('./wp-content/plugins/melli-bazar-woocommerce/test.php', 'termianl:' . print_r($terminal_key, 1).PHP_EOL, 8);
+			file_put_contents('./wp-content/plugins/melli-bazar-woocommerce/test.php', 'params:' . print_r($parameters, 1).PHP_EOL, 8);
+
+
+
+			$error_flag = false;
+			$error_msg = '';
+			$result = $this->sadad_call_api('https://mellibazar.sadadpsp.ir/api/v0/MelliBazarPaymentRequest', $parameters);
+			if ($result != false) {
+				if ($result->ResCode == 0) {
+					//header('Location: https://mellibazar.sadadpsp.ir/Purchase?Token=' . $res->Token);
+					echo '<form id="redirect_to_melli" method="get" action="https://mellibazar.sadadpsp.ir/Purchase" style="display:none !important;"  >
 										<input type="hidden"  name="Token" value="' . $result->Token . '" />
 										<input type="submit" value="Pay"/>
 									</form>
@@ -235,21 +234,21 @@ function init_melli_bazar_woocommerce() {
 										document.getElementById("redirect_to_melli").submit();
 									</script>';
 
-					} else {
-						//bank returned an error
-						$error_flag = true;
-						$error_msg = 'خطا در برقراری ارتباط با بانک! ' . $this->sadad_request_err_msg($result->ResCode);
-					}
 				} else {
-					// couldn't connect to bank
+					//bank returned an error
 					$error_flag = true;
-					$error_msg = 'خطا! برقراری ارتباط با بانک امکان پذیر نیست.';
+					$error_msg = 'خطا در برقراری ارتباط با بانک! ' . $this->sadad_request_err_msg($result->ResCode);
 				}
-				if ($error_flag) {
-					$order->add_order_note($error_msg);
-					wc_add_notice($error_msg, 'error');
-				}
+			} else {
+				// couldn't connect to bank
+				$error_flag = true;
+				$error_msg = 'خطا! برقراری ارتباط با بانک امکان پذیر نیست.';
 			}
+			if ($error_flag) {
+				$order->add_order_note($error_msg);
+				wc_add_notice($error_msg, 'error');
+			}
+			
 
 		}
 
@@ -408,6 +407,7 @@ function init_melli_bazar_woocommerce() {
 			curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
 			$result = curl_exec($ch);
 			curl_close($ch);
+			
 			return !empty($result) ? json_decode($result) : false;
 		}
 
