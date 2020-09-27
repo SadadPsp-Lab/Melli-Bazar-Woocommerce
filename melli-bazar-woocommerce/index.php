@@ -199,7 +199,15 @@ function init_melli_bazar_woocommerce() {
 					$prd->Discount = 0;
 					$product_list[] = $prd;
 				}
-
+				if ($shipping_total = $order->get_shipping_total()){
+					$prd = new stdClass();
+					$prd->GoodsCode = 'Shipment';
+					$prd->GoodsName = 'هزینه ارسال';
+					$prd->Price = $shipping_total;
+					$prd->QTY = 1;
+					$prd->Discount = 0;
+					$product_list[] = $prd;
+				}
 				$parameters = array(
 					'MerchantID' => $merchant_id,
 					'TerminalId' => $terminal_id,
